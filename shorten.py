@@ -1,9 +1,18 @@
 import zlib, base64
 from flask import Flask, redirect, request
+import urllib
 
 with open("zurldict.txt","rb") as f:
     zdict = f.read()
 
+commonurls = []
+commonurls_expanded = []
+with open("commonurls.txt","r") as f: #source: https://archive.org/details/urlteam_2025-03-06-16-17-02
+    for line in f.readlines():
+        if "\t" in line:
+            commonurl, expanded = line.rstrip("\n").split("\t")
+            commonurls.append(commonurl)
+            commonurls_expanded.append(expanded)
 
 app = Flask(__name__)
 
@@ -27,13 +36,23 @@ def home():
 </html>
     """
 
+b64dictionary = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+
 @app.post("/")
 def shorten():
     input_url = request.form['url'].replace("<", "")
-    text = input_url.lstrip("https://").encode()
+    fix = "_"
+    parsed = urllib.parse.urlsplit(input_url)
+    netloc = parsed.netloc.lstrip("www.")
+    if netloc in commonurls:
+        index = commonurls.index(netloc)
+        fix = b64dictionary[index>>6] + b64dictionary[index&63]
+        text = parsed._replace(scheme="", netloc="").geturl().lstrip("//").encode()
+    else:
+        text = parsed._replace(scheme="").geturl().lstrip("//").encode()
     co = zlib.compressobj(wbits=-15, zdict=zdict)
     c = co.compress(text) + co.flush()
-    result = base64.urlsafe_b64encode(c).decode().rstrip("=")
+    result = fix + base64.urlsafe_b64encode(c).decode().rstrip("=")
 
     return """
 <html>
@@ -59,10 +78,17 @@ dd{
 
 @app.get("/<val>")
 def result(val):
+    if not val.startswith("_"):
+        index = (b64dictionary.index(val[0])<<6)+b64dictionary.index(val[1])
+        prefix = commonurls_expanded[index]+"/"
+        val = val[2:]
+    else:
+        prefix = "https://"
+        val = val[1:]
     val = base64.urlsafe_b64decode(val.encode() + b'==')
     co = zlib.decompressobj(wbits=-15, zdict=zdict)
     c = co.decompress(val) + co.flush()
-    return redirect("https://"+c.decode())
+    return redirect(prefix+c.decode())
 
 import socket
 def get_ip():
