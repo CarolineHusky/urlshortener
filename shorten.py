@@ -33,7 +33,7 @@ def shorten():
     text = input_url.lstrip("https://").encode()
     co = zlib.compressobj(wbits=-15, zdict=zdict)
     c = co.compress(text) + co.flush()
-    result = base64.urlsafe_b64encode(c).decode()
+    result = base64.urlsafe_b64encode(c).decode().rstrip("=")
 
     return """
 <html>
@@ -59,7 +59,7 @@ dd{
 
 @app.get("/<val>")
 def result(val):
-    val = base64.urlsafe_b64decode(val.encode())
+    val = base64.urlsafe_b64decode(val.encode() + b'==')
     co = zlib.decompressobj(wbits=-15, zdict=zdict)
     c = co.decompress(val) + co.flush()
     return redirect("https://"+c.decode())
